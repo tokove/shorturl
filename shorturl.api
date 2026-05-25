@@ -1,19 +1,20 @@
 type ShortenRequest {
-    LongURL string `json:"longUrl"`
+	LongURL string `json:"longUrl" validate:"required"`
 }
 
 type ShortenResponse {
-    ShortURL string `json:"shortUrl"`
+	ShortURL string `json:"shortUrl"`
 }
 
 type RedirectRequest {
-    ShortURL string `path:"shortUrl"`
+	ShortURL string `path:"shortUrl" validate:"required"`
 }
 
 service shorturl-api {
-    @handler ShortenHandler
-    post /shorten (ShortenRequest) returns (ShortenResponse)
+	@handler ShortenHandler
+	post /shorten (ShortenRequest) returns (ShortenResponse)
 
-    @handler RedirectHandler
-    get /:shortUrl (RedirectRequest)
+	@handler RedirectHandler
+	get /:shortUrl (RedirectRequest)
 }
+
