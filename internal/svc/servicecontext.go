@@ -6,23 +6,29 @@ package svc
 import (
 	"shorturl/internal/config"
 	"shorturl/model"
+	"shorturl/sequence"
 
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
 
 type ServiceContext struct {
-	Config        config.Config
-	ShortUrlModel model.ShortUrlMapModel
-	SequenceModel model.SequenceModel
+	Config            config.Config
+	ShortUrlModel     model.ShortUrlMapModel
+	Sequence          sequence.Sequence
+	ShortUrlBlackList map[string]struct{}
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
-	sUrlConn := sqlx.NewMysql(c.ShortUrlDB.DSN)
-	seqConn := sqlx.NewMysql(c.SequenceDB.DSN)
-
+	conn := sqlx.NewMysql(c.ShortUrlDB.DSN)
+	m := make(map[string]struct{}, len(c.ShortUrlBlackList))
+	for _, word := range c.ShortUrlBlackList {
+		m[word] = struct{}{}
+	}
 	return &ServiceContext{
 		Config:        c,
-		ShortUrlModel: model.NewShortUrlMapModel(sUrlConn),
-		SequenceModel: model.NewSequenceModel(seqConn),
+		ShortUrlModel: model.NewShortUrlMapModel(conn),
+		Sequence:      sequence.NewMysql(c.SequenceDB.DSN),
+		// Sequence:      sequence.NewRedis(c.SequenceRedis.Addr),
+		ShortUrlBlackList: m,
 	}
 }

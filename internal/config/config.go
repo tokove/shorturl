@@ -13,4 +13,9 @@ type Config struct {
 	ShortUrlDB struct {
 		DSN string
 	}
+	SequenceRedis struct {
+		Addr string
+	}
+	ShortUrlBlackList []string
+	ShortDomain       string
 }

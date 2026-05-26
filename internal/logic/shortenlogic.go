@@ -8,9 +8,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"shorturl/internal/svc"
 	"shorturl/internal/types"
+	"shorturl/model"
+	"shorturl/pkg/base62"
 	"shorturl/pkg/connect"
 	"shorturl/pkg/md5"
 	"shorturl/pkg/urltool"
@@ -52,7 +55,7 @@ func (l *ShortenLogic) Shorten(req *types.ShortenRequest) (resp *types.ShortenRe
 		return nil, fmt.Errorf("long url has been shortened before, short url: %s", u.Surl.String)
 	}
 	// 1.4 不能是一个短链接
-	// https://www.google.com/?code=123， 取出www.google.com，判断是否是一个短链接
+	// https://www.google.com/path/?code=123， 取出path，判断是否是一个短链接
 	baseUrl, err := urltool.GetBasePath(req.LongURL)
 	if err != nil {
 		return nil, err
@@ -65,8 +68,31 @@ func (l *ShortenLogic) Shorten(req *types.ShortenRequest) (resp *types.ShortenRe
 		return nil, fmt.Errorf("long url is already a short url, short url: %s", baseUrl)
 	}
 	// 2. 取号生成短链
+	var seq uint64
+	var shorturl string
+	for {
+		seq, err = l.svcCtx.Sequence.Next()
+		if err != nil {
+			return nil, err
+		}
+		shorturl = base62.Int2String(seq)
+		// 2.1 安全性 base62串是乱序的
+		// 2.2 违禁词
+		if _, ok := l.svcCtx.ShortUrlBlackList[strings.ToLower(shorturl)]; !ok {
+			break
+		}
+	}
 	// 3. 存储短链和长链的映射关系
-
+	_, err = l.svcCtx.ShortUrlModel.Insert(l.ctx, &model.ShortUrlMap{
+		Lurl: sql.NullString{String: req.LongURL, Valid: true},
+		Surl: sql.NullString{String: shorturl, Valid: true},
+		Md5:  sql.NullString{String: md5Str, Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
 	// 4. 返回短链
-	return
+	return &types.ShortenResponse{
+		ShortURL: l.svcCtx.Config.ShortDomain + "/" + shorturl,
+	}, nil
 }
