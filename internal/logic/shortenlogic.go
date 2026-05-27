@@ -91,7 +91,11 @@ func (l *ShortenLogic) Shorten(req *types.ShortenRequest) (resp *types.ShortenRe
 	if err != nil {
 		return nil, err
 	}
-	// 4. 返回短链
+	// 4. 加入到布隆过滤器中
+	if err := l.svcCtx.Filter.Add([]byte(shorturl)); err != nil {
+		return nil, err
+	}
+	// 5. 返回短链
 	return &types.ShortenResponse{
 		ShortURL: l.svcCtx.Config.ShortDomain + "/" + shorturl,
 	}, nil

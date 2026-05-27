@@ -5,6 +5,7 @@ package logic
 
 import (
 	"context"
+	"errors"
 
 	"shorturl/internal/svc"
 	"shorturl/internal/types"
@@ -27,11 +28,19 @@ func NewRedirectLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Redirect
 }
 
 func (l *RedirectLogic) Redirect(req *types.RedirectRequest) (resp *types.RedirectResponse, err error) {
-	// 1. 根据短链查长链
+	// 1. 查询布隆过滤器
+	exists, err := l.svcCtx.Filter.Exists([]byte(req.ShortURL))
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.New("short url not found")
+	}
+	// 2. 根据短链查长链
 	u, err := l.svcCtx.ShortUrlModel.FindLurlBySurl(l.ctx, req.ShortURL)
 	if err != nil {
 		return nil, err
 	}
-	// 2. 返回长链，进行重定向
+	// 3. 返回长链，进行重定向
 	return &types.RedirectResponse{LongURL: u}, nil
 }

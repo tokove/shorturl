@@ -21,4 +21,10 @@ type Config struct {
 	}
 	ShortUrlBlackList []string
 	ShortDomain       string
+	BloomFilter       struct {
+		Addr    string
+		Key     string
+		Size    uint
+		Percent float64
+	}
 }

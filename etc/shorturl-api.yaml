@@ -15,3 +15,9 @@ CacheRedis:
 ShortUrlBlackList: ["api", "fuxk", "admin", "redirect", "shorten"]
 
 ShortDomain: s.com
+
+BloomFilter:
+  Addr: localhost:16379
+  Key: shorturl:bloom
+  Size: 1000000
+  Percent: 0.01
