@@ -16,6 +16,9 @@ type Config struct {
 	SequenceRedis struct {
 		Addr string
 	}
+	CacheRedis struct {
+		Addr string
+	}
 	ShortUrlBlackList []string
 	ShortDomain       string
 }

@@ -30,11 +30,11 @@ func RedirectHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 
 		l := logic.NewRedirectLogic(r.Context(), svcCtx)
-		err := l.Redirect(&req)
+		u, err := l.Redirect(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
 		} else {
-			httpx.Ok(w)
+			http.Redirect(w, r, u.LongURL, http.StatusFound)
 		}
 	}
 }

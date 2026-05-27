@@ -8,6 +8,7 @@ import (
 	"shorturl/model"
 	"shorturl/sequence"
 
+	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
 
@@ -16,6 +17,7 @@ type ServiceContext struct {
 	ShortUrlModel     model.ShortUrlMapModel
 	Sequence          sequence.Sequence
 	ShortUrlBlackList map[string]struct{}
+	CacheRedis        *redis.Redis
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -24,11 +26,13 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	for _, word := range c.ShortUrlBlackList {
 		m[word] = struct{}{}
 	}
+	cacherdb := redis.New(c.CacheRedis.Addr)
 	return &ServiceContext{
 		Config:        c,
-		ShortUrlModel: model.NewShortUrlMapModel(conn),
+		ShortUrlModel: model.NewShortUrlMapModel(conn, cacherdb),
 		Sequence:      sequence.NewMysql(c.SequenceDB.DSN),
-		// Sequence:      sequence.NewRedis(c.SequenceRedis.Addr),
+		// Sequence:          sequence.NewRedis(c.SequenceRedis.Addr),
 		ShortUrlBlackList: m,
+		CacheRedis:        cacherdb,
 	}
 }

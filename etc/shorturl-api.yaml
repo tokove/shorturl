@@ -9,6 +9,8 @@ ShortURLDB:
 
 SequenceRedis:
   Addr: localhost:16379
+CacheRedis:
+  Addr: localhost:16379
 
 ShortUrlBlackList: ["api", "fuxk", "admin", "redirect", "shorten"]
 

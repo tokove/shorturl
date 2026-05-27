@@ -7,6 +7,10 @@ type RedirectRequest struct {
 	ShortURL string `path:"shortUrl" validate:"required"`
 }
 
+type RedirectResponse struct {
+	LongURL string `json:"longUrl"`
+}
+
 type ShortenRequest struct {
 	LongURL string `json:"longUrl" validate:"required"`
 }
