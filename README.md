@@ -86,7 +86,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 }
 ```
 ## 6. 编写业务代码
-
+![架构图](shorturl.svg)
 ## 7. 编写单元测试为某些函数
 可以用 vscode 自动生成测试框架
 目前只为 pkg 中的工具函数编写了单元测试

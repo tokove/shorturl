@@ -27,4 +27,9 @@ type Config struct {
 		Size    uint
 		Percent float64
 	}
+	LocalCache struct {
+		NumCounters int64
+		MaxCost     int64
+		BufferItems int64
+	}
 }

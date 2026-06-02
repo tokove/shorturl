@@ -21,3 +21,8 @@ BloomFilter:
   Key: shorturl:bloom
   Size: 1000000
   Percent: 0.01
+
+LocalCache: 
+  NumCounters: 1000000
+  MaxCost: 104857600  # 100MB
+  BufferItems: 64

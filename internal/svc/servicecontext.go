@@ -10,6 +10,7 @@ import (
 	"shorturl/model"
 	"shorturl/sequence"
 
+	"github.com/dgraph-io/ristretto"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 	"golang.org/x/sync/singleflight"
@@ -32,10 +33,18 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 	cacherdb := redis.New(c.CacheRedis.Addr)
 	sf := new(singleflight.Group)
+	lc, err := ristretto.NewCache(&ristretto.Config{
+		NumCounters: c.LocalCache.NumCounters,
+		MaxCost:     c.LocalCache.MaxCost,
+		BufferItems: c.LocalCache.BufferItems,
+	})
+	if err != nil {
+		panic(err)
+	}
 	// bloomrdb := redis.New(c.BloomFilter.Addr) // rdb版本
 	svcCtx := &ServiceContext{
 		Config:        c,
-		ShortUrlModel: model.NewShortUrlMapModel(conn, cacherdb, sf),
+		ShortUrlModel: model.NewShortUrlMapModel(conn, cacherdb, sf, lc),
 		Sequence:      sequence.NewMysql(c.SequenceDB.DSN),
 		// Sequence:          sequence.NewRedis(c.SequenceRedis.Addr),
 		ShortUrlBlackList: m,

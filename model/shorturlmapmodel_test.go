@@ -8,6 +8,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/alicebob/miniredis/v2"
+	"github.com/dgraph-io/ristretto"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 	"golang.org/x/sync/singleflight"
@@ -23,6 +24,14 @@ func TestFindLurlBySurlConcurrent(t *testing.T) {
 	conn := sqlx.NewSqlConnFromDB(db)
 	defer db.Close()
 	sf := new(singleflight.Group)
+	lc, err := ristretto.NewCache(&ristretto.Config{
+		NumCounters: 1000000,
+		MaxCost:     104857600,
+		BufferItems: 64,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// 设置期望的 SQL 查询
 	mock.ExpectQuery("select .* from `short_url_map`").
@@ -30,10 +39,10 @@ func TestFindLurlBySurlConcurrent(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "create_at", "create_by", "is_del", "lurl", "md5", "surl"}).
 			AddRow(1, time.Now(), "", 0, "https://github.com/", "abc", "k"))
 
-	m := NewShortUrlMapModel(conn, rdb, sf)
+	m := NewShortUrlMapModel(conn, rdb, sf, lc)
 
 	var wg sync.WaitGroup
-	for range 100 {
+	for range 1000 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
