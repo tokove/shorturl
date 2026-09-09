@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math/rand/v2"
+	"time"
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/zeromicro/go-zero/core/logx"
@@ -46,8 +48,13 @@ func (m *customShortUrlMapModel) withSession(session sqlx.Session) ShortUrlMapMo
 	return NewShortUrlMapModel(sqlx.NewSqlConnFromSession(session), m.rdb, m.sf, m.lc)
 }
 
-const cacheKeyPrefix = "shorturl:cache:"
-const cacheTTL = 60 * 60 * 24
+const (
+	cacheKeyPrefix   = "shorturl:cache:"
+	redisCacheTTL    = 60 * 60 * 24 // 24 hours
+	redisCacheJitter = 60 * 60 * 2  // 2 hours
+	localCacheTTL    = 5 * time.Minute
+	localCacheJitter = time.Minute
+)
 
 func (m *customShortUrlMapModel) FindLurlBySurl(ctx context.Context, surl string) (string, error) {
 	// 0. 先从本地缓存中查询
@@ -55,36 +62,52 @@ func (m *customShortUrlMapModel) FindLurlBySurl(ctx context.Context, surl string
 		logx.Infof("Found long URL in local cache for short URL: %s", v.(string))
 		return v.(string), nil
 	}
-	v, err, _ := m.sf.Do(surl, func() (any, error) {
+
+	sfCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	res := m.sf.DoChan(surl, func() (any, error) {
+		detachedCtx := context.WithoutCancel(ctx)
 		// 1. 从缓存中查询长链
-		lurl, err := m.rdb.GetCtx(ctx, cacheKeyPrefix+surl)
+		lurl, err := m.rdb.GetCtx(detachedCtx, cacheKeyPrefix+surl)
+		// 1.0 出错
+		if err != nil {
+			logx.Infof("Error found long URL in cache for short URL: %s, error: %v", surl, err)
+		}
 		// 1.1 查到直接返回
-		if err == nil && lurl != "" {
+		if lurl != "" {
 			logx.Infof("Found long URL in cache for short URL: %s", lurl)
-			m.lc.SetWithTTL(cacheKeyPrefix+surl, lurl, 1, cacheTTL)
+			m.lc.SetWithTTL(cacheKeyPrefix+surl, lurl, 1, localCacheTTL+rand.N(localCacheJitter))
 			return lurl, nil
 		}
 		// 1.2 没有查到，继续从数据库中查询
 		// 2. 从数据库中查询长链
-		u, err := m.FindOneBySurl(ctx, sql.NullString{String: surl, Valid: true})
+		u, err := m.FindOneBySurl(detachedCtx, sql.NullString{String: surl, Valid: true})
 		// 2.1 没有查到，返回错误
 		if err != nil {
 			return "", err
 		}
 		// 2.2 查到，写入缓存，并返回
-		if ok := m.lc.SetWithTTL(cacheKeyPrefix+surl, u.Lurl.String, 1, cacheTTL); !ok {
+		if ok := m.lc.SetWithTTL(cacheKeyPrefix+surl, u.Lurl.String, 1, localCacheTTL+rand.N(localCacheJitter)); !ok {
 			logx.Infof("Failed to set local cache for short URL: %s", surl)
 		}
-		err = m.rdb.SetexCtx(ctx, cacheKeyPrefix+surl, u.Lurl.String, cacheTTL)
+		err = m.rdb.SetexCtx(detachedCtx, cacheKeyPrefix+surl, u.Lurl.String, int(redisCacheTTL)+rand.IntN(redisCacheJitter))
 		if err != nil {
-			return "", err
+			logx.Infof("Failed to set redis cache for short URL: %s", surl)
+			return u.Lurl.String, nil
 		}
 		return u.Lurl.String, nil
 	})
-	if err != nil {
-		return "", err
+
+	select {
+	case <-sfCtx.Done():
+		return "", fmt.Errorf("timeout while fetching long URL for short URL: %s", surl)
+	case r := <-res:
+		if r.Err != nil {
+			return "", r.Err
+		}
+		return r.Val.(string), nil
 	}
-	return v.(string), nil
 }
 
 func (m *customShortUrlMapModel) FindSurlsByCursor(ctx context.Context, lastId uint64, limit uint64) ([]*ShortUrlMap, error) {
