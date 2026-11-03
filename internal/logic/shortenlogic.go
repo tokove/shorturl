@@ -18,6 +18,7 @@ import (
 	"shorturl/pkg/md5"
 	"shorturl/pkg/urltool"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
@@ -48,11 +49,14 @@ func (l *ShortenLogic) Shorten(req *types.ShortenRequest) (resp *types.ShortenRe
 	md5Str := md5.Sum([]byte(req.LongURL))
 	// 1.3.2 从数据库中查询MD5对应的短链
 	u, err := l.svcCtx.ShortUrlModel.FindOneByMd5(l.ctx, sql.NullString{String: md5Str, Valid: true})
+	if err == nil {
+		// 已经转过，直接返回已有短链
+		return &types.ShortenResponse{
+			ShortURL: l.svcCtx.Config.ShortDomain + "/" + u.Surl.String,
+		}, nil
+	}
 	if !errors.Is(err, sqlx.ErrNotFound) {
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("long url has been shortened before, short url: %s", u.Surl.String)
+		return nil, err
 	}
 	// 1.4 不能是一个短链接
 	// https://www.google.com/path/?code=123， 取出path，判断是否是一个短链接
@@ -89,7 +93,17 @@ func (l *ShortenLogic) Shorten(req *types.ShortenRequest) (resp *types.ShortenRe
 		Md5:  sql.NullString{String: md5Str, Valid: true},
 	})
 	if err != nil {
-		return nil, err
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+			// 并发下别人先插进去了，回查，把已有的短链返回给用户
+			u, qErr := l.svcCtx.ShortUrlModel.FindOneByMd5(l.ctx, sql.NullString{String: md5Str, Valid: true})
+			if qErr != nil {
+				return nil, qErr
+			}
+			shorturl = u.Surl.String
+		} else {
+			return nil, err
+		}
 	}
 	// 4. 加入到布隆过滤器中
 	if err := l.svcCtx.Filter.Add([]byte(shorturl)); err != nil {
