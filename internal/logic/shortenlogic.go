@@ -14,7 +14,6 @@ import (
 	"shorturl/internal/types"
 	"shorturl/model"
 	"shorturl/pkg/base62"
-	"shorturl/pkg/connect"
 	"shorturl/pkg/md5"
 	"shorturl/pkg/urltool"
 
@@ -40,9 +39,9 @@ func NewShortenLogic(ctx context.Context, svcCtx *svc.ServiceContext) *ShortenLo
 func (l *ShortenLogic) Shorten(req *types.ShortenRequest) (resp *types.ShortenResponse, err error) {
 	// 1. 参数校验
 	// 1.1 不能为空：handler层已经做了校验，这里可以不再校验
-	// 1.2 长链合法
-	if ok := connect.Get(req.LongURL); !ok {
-		return nil, errors.New("invalid long url")
+	// 1.2 长链合法性校验
+	if err := urltool.ValidateURL(req.LongURL, l.svcCtx.Config.ShortDomain); err != nil {
+		return nil, err
 	}
 	// 1.3 是否转链过
 	// 1.3.1 将长链转为MD5
