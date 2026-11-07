@@ -22,7 +22,12 @@ BloomFilter:
   Size: 1000000
   Percent: 0.01
 
-LocalCache: 
+LocalCache:
   NumCounters: 1000000
   MaxCost: 104857600  # 100MB
   BufferItems: 64
+
+Kafka:
+  Brokers:
+    - localhost:9092
+  Topic: shorturl_clicks

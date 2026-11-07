@@ -32,4 +32,8 @@ type Config struct {
 		MaxCost     int64
 		BufferItems int64
 	}
+	Kafka struct {
+		Brokers []string
+		Topic   string
+	}
 }

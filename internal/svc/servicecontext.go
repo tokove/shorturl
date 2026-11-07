@@ -7,6 +7,7 @@ import (
 	"context"
 	"shorturl/internal/config"
 	"shorturl/internal/filter"
+	"shorturl/internal/kafka"
 	"shorturl/model"
 	"shorturl/sequence"
 
@@ -23,6 +24,7 @@ type ServiceContext struct {
 	ShortUrlBlackList map[string]struct{}
 	CacheRedis        *redis.Redis
 	Filter            filter.Filter
+	Producer          kafka.ClickProducer
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -41,6 +43,10 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	if err != nil {
 		panic(err)
 	}
+	producer, err := kafka.NewProducer(c.Kafka.Brokers, c.Kafka.Topic)
+	if err != nil {
+		panic(err)
+	}
 	// bloomrdb := redis.New(c.BloomFilter.Addr) // rdb版本
 	svcCtx := &ServiceContext{
 		Config:        c,
@@ -50,7 +56,8 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		ShortUrlBlackList: m,
 		CacheRedis:        cacherdb,
 		// Filter:            filter.NewRedisFilter(bloomrdb, c.BloomFilter.Key, c.BloomFilter.Size), // rdb版本
-		Filter: filter.NewMemoryFilter(c.BloomFilter.Size, c.BloomFilter.Percent), // 内存版本
+		Filter:   filter.NewMemoryFilter(c.BloomFilter.Size, c.BloomFilter.Percent), // 内存版本
+		Producer: producer,
 	}
 	if err := loadDataToFilter(svcCtx); err != nil {
 		panic(err)
