@@ -3,7 +3,10 @@
 
 package config
 
-import "github.com/zeromicro/go-zero/rest"
+import (
+	"github.com/zeromicro/go-zero/rest"
+	"time"
+)
 
 type Config struct {
 	rest.RestConf
@@ -11,6 +14,9 @@ type Config struct {
 		DSN string
 	}
 	ShortUrlDB struct {
+		DSN string
+	}
+	ClickDB struct {
 		DSN string
 	}
 	SequenceRedis struct {
@@ -33,7 +39,11 @@ type Config struct {
 		BufferItems int64
 	}
 	Kafka struct {
-		Brokers []string
-		Topic   string
+		Brokers         []string
+		Topic           string
+		GroupID         string
+		DeadLetterTopic string
+		BatchSize       int
+		FlushInterval   time.Duration
 	}
 }

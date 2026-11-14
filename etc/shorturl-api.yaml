@@ -6,6 +6,8 @@ SequenceDB:
   DSN: root:root123456@tcp(localhost:13306)/shorturl?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai
 ShortURLDB:
   DSN: root:root123456@tcp(localhost:13306)/shorturl?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai
+ClickDB:
+  DSN: root:root123456@tcp(localhost:13306)/shorturl?charset=utf8mb4&parseTime=True&loc=Asia%2FShanghai
 
 SequenceRedis:
   Addr: localhost:16379
@@ -31,3 +33,7 @@ Kafka:
   Brokers:
     - localhost:9092
   Topic: shorturl_clicks
+  GroupID: shorturl-consumer
+  DeadLetterTopic: shorturl_clicks_dlq
+  BatchSize: 100
+  FlushInterval: 1s
