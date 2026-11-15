@@ -6,6 +6,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"testing"
 	"time"
 
@@ -410,5 +412,63 @@ func TestConsumerShutdownAfterInsert(t *testing.T) {
 	}
 	if m.inserts != 1 || reader.commits != 2 {
 		t.Fatalf("inserts=%d commits=%d", m.inserts, reader.commits)
+	}
+}
+
+type reconnectReader struct {
+	testReader
+	fetchErrors []error
+	onError     func()
+}
+
+func (r *reconnectReader) FetchMessage(ctx context.Context) (kafkago.Message, error) {
+	if len(r.fetchErrors) > 0 {
+		err := r.fetchErrors[0]
+		r.fetchErrors = r.fetchErrors[1:]
+		if r.onError != nil {
+			r.onError()
+		}
+		return kafkago.Message{}, err
+	}
+	return r.testReader.FetchMessage(ctx)
+}
+
+func TestConsumerReconnect(t *testing.T) {
+	for _, fetchErr := range []error{io.EOF, io.ErrUnexpectedEOF, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}, kafkago.LeaderNotAvailable} {
+		t.Run(fetchErr.Error(), func(t *testing.T) {
+			reader := &reconnectReader{testReader: testReader{message: batchMessage(0)}, fetchErrors: []error{fetchErr}}
+			clickModel := &testClickModel{}
+			consumer := &Consumer{reader: reader, clickModel: clickModel, batchSize: 1, flushInterval: time.Second}
+			if err := consumer.Run(context.Background()); !errors.Is(err, context.Canceled) {
+				t.Fatalf("Run: %v", err)
+			}
+			if clickModel.inserts != 1 || reader.commits != 1 {
+				t.Fatalf("inserts=%d commits=%d", clickModel.inserts, reader.commits)
+			}
+		})
+	}
+}
+
+func TestConsumerReconnectCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reader := &reconnectReader{fetchErrors: []error{io.EOF}, onError: cancel}
+	consumer := &Consumer{reader: reader, batchSize: 1, flushInterval: time.Second}
+	start := time.Now()
+	if err := consumer.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if time.Since(start) >= time.Second {
+		t.Fatal("retry wait did not stop on cancellation")
+	}
+}
+
+func TestConsumerFetchPermanentError(t *testing.T) {
+	for _, fetchErr := range []error{errors.New("reader closed"), kafkago.TopicAuthorizationFailed} {
+		reader := &reconnectReader{fetchErrors: []error{fetchErr}}
+		consumer := &Consumer{reader: reader, batchSize: 1, flushInterval: time.Second}
+		if err := consumer.Run(context.Background()); !errors.Is(err, fetchErr) {
+			t.Fatalf("Run: %v, want %v", err, fetchErr)
+		}
 	}
 }

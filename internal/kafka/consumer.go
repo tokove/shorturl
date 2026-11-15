@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	kafkago "github.com/segmentio/kafka-go"
+	"github.com/zeromicro/go-zero/core/logx"
 )
 
 type messageReader interface {
@@ -123,7 +124,25 @@ func (c *Consumer) Run(ctx context.Context) (err error) {
 				}
 				continue
 			}
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if !isRetryableKafkaError(err) {
+				return err
+			}
+			logx.Errorf("kafka: fetch click events failed, retrying: %v", err)
+			delay := time.Second
+			if len(records) > 0 && time.Until(deadline) < delay {
+				delay = time.Until(deadline)
+			}
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
+			continue
 		}
 		var event ClickEvent
 		if err := json.Unmarshal(msg.Value, &event); err != nil {
@@ -218,4 +237,20 @@ func isRetryableDBError(err error) bool {
 		}
 	}
 	return false
+}
+
+// 拉取遇到临时连接或 Kafka 错误时重试，配置、权限等错误仍返回。
+func isRetryableKafkaError(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var kafkaErr kafkago.Error
+	if errors.As(err, &kafkaErr) {
+		return kafkaErr.Temporary()
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
