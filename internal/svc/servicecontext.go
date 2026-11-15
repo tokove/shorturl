@@ -43,7 +43,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	if err != nil {
 		panic(err)
 	}
-	producer, err := kafka.NewProducer(c.Kafka.Brokers, c.Kafka.Topic)
+	producer, err := kafka.NewProducer(c.Kafka.Brokers, c.Kafka.Topic, model.NewClickModel(sqlx.NewMysql(c.ClickDB.DSN)))
 	if err != nil {
 		panic(err)
 	}
