@@ -7,7 +7,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
 
 	"shorturl/internal/svc"
@@ -56,19 +55,6 @@ func (l *ShortenLogic) Shorten(req *types.ShortenRequest) (resp *types.ShortenRe
 	}
 	if !errors.Is(err, sqlx.ErrNotFound) {
 		return nil, err
-	}
-	// 1.4 不能是一个短链接
-	// https://www.google.com/path/?code=123， 取出path，判断是否是一个短链接
-	baseUrl, err := urltool.GetBasePath(req.LongURL)
-	if err != nil {
-		return nil, err
-	}
-	_, err = l.svcCtx.ShortUrlModel.FindOneBySurl(l.ctx, sql.NullString{String: baseUrl, Valid: true})
-	if !errors.Is(err, sqlx.ErrNotFound) {
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("long url is already a short url, short url: %s", baseUrl)
 	}
 	// 2. 取号生成短链
 	var seq uint64
