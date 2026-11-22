@@ -145,12 +145,16 @@ func (c *Consumer) Run(ctx context.Context) (err error) {
 			continue
 		}
 		var event ClickEvent
-		if err := json.Unmarshal(msg.Value, &event); err != nil {
+		eventErr := json.Unmarshal(msg.Value, &event)
+		if eventErr == nil {
+			eventErr = event.validate()
+		}
+		if eventErr != nil {
 			// 先处理前面的正常消息，避免坏消息的 offset 越过未入库数据。
 			if flushErr := flush(ctx); flushErr != nil {
 				return flushErr
 			}
-			if err := c.sendDeadLetter(ctx, msg, err); err != nil {
+			if err := c.sendDeadLetter(ctx, msg, eventErr); err != nil {
 				return err
 			}
 			if err := c.commit(ctx, msg); err != nil {

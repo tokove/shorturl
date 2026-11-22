@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -147,7 +148,7 @@ func TestConsumerRetriesWrite(t *testing.T) {
 		{"permanent", nil, &mysql.MySQLError{Number: 1406}, 1, 0, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reader := &testReader{message: kafkago.Message{Value: []byte(`{"event_id":"test-id","short_url":"Ab1","ts":1}`)}}
+			reader := &testReader{message: batchMessage(0)}
 			clickModel := &testClickModel{insertErrors: tc.failures, insertErr: tc.finalErr}
 			consumer := &Consumer{batchSize: 1, flushInterval: time.Second, reader: reader, clickModel: clickModel}
 			err := consumer.Run(context.Background())
@@ -237,6 +238,56 @@ func TestConsumerDeadLetter(t *testing.T) {
 					t.Fatalf("headers=%v", headers)
 				}
 			}
+		})
+	}
+}
+
+func TestConsumerDeadLettersInvalidEventFields(t *testing.T) {
+	for _, tc := range []struct {
+		name, field string
+		change      func(*ClickEvent)
+	}{
+		{"missing fields", "event_id", func(e *ClickEvent) { *e = ClickEvent{} }},
+		{"invalid event ID", "event_id", func(e *ClickEvent) { e.EventID = "test-id" }},
+		{"noncanonical event ID", "event_id", func(e *ClickEvent) { e.EventID = "B5B03269-FD35-4467-9BEE-4FCD163FD242" }},
+		{"nil UUID", "event_id", func(e *ClickEvent) { e.EventID = uuid.Nil.String() }},
+		{"empty short code", "short_url", func(e *ClickEvent) { e.ShortURL = "" }},
+		{"invalid short code", "short_url", func(e *ClickEvent) { e.ShortURL = "Ab/1" }},
+		{"short code too long", "short_url", func(e *ClickEvent) { e.ShortURL = "0123456789AB" }},
+		{"invalid timestamp", "ts", func(e *ClickEvent) { e.Ts = 0 }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			event := NewClickEvent("Ab1")
+			tc.change(&event)
+			value, err := json.Marshal(event)
+			if err != nil {
+				t.Fatal(err)
+			}
+			msg := kafkago.Message{Topic: "clicks", Partition: 2, Offset: 8, Value: value}
+			writer := &testWriter{}
+			reader := &batchReader{messages: []kafkago.Message{msg}, beforeCommit: func() {
+				if len(writer.messages) != 1 {
+					t.Fatal("offset committed before dead-letter write")
+				}
+			}}
+			m := &testClickModel{}
+			c := &Consumer{reader: reader, deadLetter: writer, clickModel: m, batchSize: 1, flushInterval: time.Second}
+			if err := c.Run(context.Background()); !errors.Is(err, context.Canceled) {
+				t.Fatalf("Run: %v", err)
+			}
+			if m.inserts != 0 || len(reader.committed) != 1 || reader.committed[0].Offset != msg.Offset {
+				t.Fatalf("inserts=%d commits=%v", m.inserts, reader.committed)
+			}
+			sent := writer.messages[0]
+			if string(sent.Value) != string(msg.Value) {
+				t.Fatal("dead letter did not preserve the original event")
+			}
+			for _, h := range sent.Headers {
+				if h.Key == "error" && strings.Contains(string(h.Value), tc.field) {
+					return
+				}
+			}
+			t.Fatalf("missing validation reason for %s in headers: %v", tc.field, sent.Headers)
 		})
 	}
 }
