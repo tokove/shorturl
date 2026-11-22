@@ -58,8 +58,9 @@ const (
 )
 
 func (m *customShortUrlMapModel) FindLurlBySurl(ctx context.Context, surl string) (string, error) {
+	key := cacheKeyPrefix + surl
 	// 0. 先从本地缓存中查询
-	if v, found := m.lc.Get(cacheKeyPrefix + surl); found {
+	if v, found := m.lc.Get(key); found {
 		return v.(string), nil
 	}
 
@@ -70,14 +71,14 @@ func (m *customShortUrlMapModel) FindLurlBySurl(ctx context.Context, surl string
 		detachedCtx, cancelLookup := context.WithTimeout(context.WithoutCancel(ctx), lookupTimeout)
 		defer cancelLookup()
 		// 1. 从缓存中查询长链
-		lurl, err := m.rdb.GetCtx(detachedCtx, cacheKeyPrefix+surl)
+		lurl, err := m.rdb.GetCtx(detachedCtx, key)
 		// 1.0 出错
 		if err != nil {
 			logx.Infof("Error found long URL in cache for short URL: %s, error: %v", surl, err)
 		}
 		// 1.1 查到直接返回
 		if lurl != "" {
-			m.lc.SetWithTTL(cacheKeyPrefix+surl, lurl, 1, localCacheTTL+rand.N(localCacheJitter))
+			m.setLocalCache(key, lurl)
 			return lurl, nil
 		}
 		// 1.2 没有查到，继续从数据库中查询
@@ -88,10 +89,10 @@ func (m *customShortUrlMapModel) FindLurlBySurl(ctx context.Context, surl string
 			return "", err
 		}
 		// 2.2 查到，写入缓存，并返回
-		if ok := m.lc.SetWithTTL(cacheKeyPrefix+surl, u.Lurl.String, 1, localCacheTTL+rand.N(localCacheJitter)); !ok {
+		if ok := m.setLocalCache(key, u.Lurl.String); !ok {
 			logx.Infof("Failed to set local cache for short URL: %s", surl)
 		}
-		err = m.rdb.SetexCtx(detachedCtx, cacheKeyPrefix+surl, u.Lurl.String, int(redisCacheTTL)+rand.IntN(redisCacheJitter))
+		err = m.rdb.SetexCtx(detachedCtx, key, u.Lurl.String, int(redisCacheTTL)+rand.IntN(redisCacheJitter))
 		if err != nil {
 			logx.Infof("Failed to set redis cache for short URL: %s", surl)
 			return u.Lurl.String, nil
@@ -108,6 +109,11 @@ func (m *customShortUrlMapModel) FindLurlBySurl(ctx context.Context, surl string
 		}
 		return r.Val.(string), nil
 	}
+}
+
+func (m *customShortUrlMapModel) setLocalCache(key, lurl string) bool {
+	cost := int64(len(key) + len(lurl))
+	return m.lc.SetWithTTL(key, lurl, cost, localCacheTTL+rand.N(localCacheJitter))
 }
 
 func (m *customShortUrlMapModel) FindSurlsByCursor(ctx context.Context, lastId uint64, limit uint64) ([]*ShortUrlMap, error) {

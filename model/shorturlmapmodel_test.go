@@ -80,6 +80,49 @@ func TestFindLurlBySurlBoundsSharedLookup(t *testing.T) {
 	}
 }
 
+func TestFindLurlBySurlRespectsLocalCacheBudget(t *testing.T) {
+	const surl, lurl = "k", "https://example.com/a-long-path"
+	key := cacheKeyPrefix + surl
+	for _, source := range []string{"redis", "database"} {
+		t.Run(source, func(t *testing.T) {
+			mr := miniredis.RunT(t)
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			if source == "redis" {
+				if err := mr.Set(key, lurl); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				mock.ExpectQuery("select .* from `short_url_map`").WithArgs(surl).
+					WillReturnRows(sqlmock.NewRows([]string{"id", "create_at", "create_by", "is_del", "lurl", "md5", "surl"}).
+						AddRow(1, time.Now(), "", 0, lurl, "abc", surl))
+			}
+			lc, err := ristretto.NewCache(&ristretto.Config{
+				NumCounters: 100, MaxCost: int64(len(key) + len(lurl) - 1),
+				BufferItems: 64, IgnoreInternalCost: true,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer lc.Close()
+			m := NewShortUrlMapModel(sqlx.NewSqlConnFromDB(db), redis.New(mr.Addr()), new(singleflight.Group), lc)
+			if got, err := m.FindLurlBySurl(context.Background(), surl); err != nil || got != lurl {
+				t.Fatalf("FindLurlBySurl = %q, %v; want %q", got, err, lurl)
+			}
+			lc.Wait()
+			if _, ok := lc.Get(key); ok {
+				t.Fatal("local cache admitted an entry larger than its budget")
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestFindLurlBySurlConcurrent(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.New(mr.Addr())
