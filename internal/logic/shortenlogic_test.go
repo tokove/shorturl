@@ -3,6 +3,8 @@ package logic
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strings"
 	"testing"
 
 	"shorturl/internal/filter"
@@ -66,7 +68,7 @@ func TestShortenRejectsOwnDomain(t *testing.T) {
 	logic := NewShortenLogic(context.Background(), sc)
 	for _, longURL := range []string{"https://s.com/3", "https://api.s.com/3"} {
 		resp, err := logic.Shorten(&types.ShortenRequest{LongURL: longURL})
-		if resp != nil || err == nil || err.Error() != "cannot shorten self domain" {
+		if resp != nil || !errors.Is(err, ErrInvalidLongURL) || !strings.Contains(err.Error(), "cannot shorten self domain") {
 			t.Errorf("Shorten(%q) = %+v, %v; want self-domain rejection", longURL, resp, err)
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"shorturl/internal/svc"
@@ -20,6 +21,8 @@ import (
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
+
+var ErrInvalidLongURL = errors.New("invalid long url")
 
 type ShortenLogic struct {
 	logx.Logger
@@ -40,7 +43,7 @@ func (l *ShortenLogic) Shorten(req *types.ShortenRequest) (resp *types.ShortenRe
 	// 1.1 不能为空：handler层已经做了校验，这里可以不再校验
 	// 1.2 长链合法性校验
 	if err := urltool.ValidateURL(req.LongURL, l.svcCtx.Config.ShortDomain); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrInvalidLongURL, err)
 	}
 	// 1.3 是否转链过
 	// 1.3.1 将长链转为MD5

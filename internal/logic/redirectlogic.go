@@ -10,9 +10,12 @@ import (
 	"shorturl/internal/kafka"
 	"shorturl/internal/svc"
 	"shorturl/internal/types"
+	"shorturl/model"
 
 	"github.com/zeromicro/go-zero/core/logx"
 )
+
+var ErrShortURLNotFound = errors.New("short url not found")
 
 type RedirectLogic struct {
 	logx.Logger
@@ -35,10 +38,13 @@ func (l *RedirectLogic) Redirect(req *types.RedirectRequest) (resp *types.Redire
 		return nil, err
 	}
 	if !exists {
-		return nil, errors.New("short url not found")
+		return nil, ErrShortURLNotFound
 	}
 	// 2. 根据短链查长链
 	u, err := l.svcCtx.ShortUrlModel.FindLurlBySurl(l.ctx, req.ShortURL)
+	if errors.Is(err, model.ErrNotFound) {
+		return nil, ErrShortURLNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
