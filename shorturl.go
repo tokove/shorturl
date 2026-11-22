@@ -6,6 +6,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"time"
 
 	"shorturl/internal/config"
 	"shorturl/internal/handler"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/core/logx"
+	"github.com/zeromicro/go-zero/core/proc"
 	"github.com/zeromicro/go-zero/rest"
 )
 
@@ -26,9 +28,10 @@ func main() {
 
 	server := rest.MustNewServer(c.RestConf)
 	defer server.Stop()
+	proc.SetTimeToForceQuit(15 * time.Second)
 
 	ctx := svc.NewServiceContext(c)
-	// 退出时刷新 Kafka 缓冲区，避免丢失未发送的点击事件
+	// HTTP 服务停止后，限时处理队列中的点击事件。
 	defer func() {
 		if err := ctx.Producer.Close(); err != nil {
 			logx.Errorf("close kafka producer failed: %v", err)

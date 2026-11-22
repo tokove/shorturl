@@ -43,8 +43,9 @@ func (l *RedirectLogic) Redirect(req *types.RedirectRequest) (resp *types.Redire
 		return nil, err
 	}
 	// 3. 发送点击事件到kafka（旁路统计，失败不影响重定向）
-	if err := l.svcCtx.Producer.Send(l.ctx, kafka.NewClickEvent(req.ShortURL)); err != nil {
-		l.Errorf("send click event failed, surl=%s, err=%v", req.ShortURL, err)
+	event := kafka.NewClickEvent(req.ShortURL)
+	if err := l.svcCtx.Producer.Send(l.ctx, event); err != nil {
+		l.Errorf("enqueue click event failed, event_id=%s, surl=%s, err=%v", event.EventID, event.ShortURL, err)
 	}
 	// 4. 返回长链，进行重定向
 	return &types.RedirectResponse{LongURL: u}, nil
