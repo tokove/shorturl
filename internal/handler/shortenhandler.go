@@ -10,7 +10,6 @@ import (
 	"shorturl/internal/svc"
 	"shorturl/internal/types"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest/httpx"
 )
@@ -23,7 +22,7 @@ func ShortenHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			return
 		}
 
-		if err := validator.New().StructCtx(r.Context(), &req); err != nil {
+		if err := validate.StructCtx(r.Context(), &req); err != nil {
 			logx.Errorw("validator check error", logx.LogField{Key: "error", Value: err.Error()})
 			httpx.ErrorCtx(r.Context(), w, err)
 			return
