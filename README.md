@@ -22,12 +22,20 @@ CREATE TABLE `short_url_map` (
     
     `lurl` varchar(2048) DEFAULT NULL COMMENT '长链接',
     `md5` char(32) DEFAULT NULL COMMENT '长链接MD5', 
-    `surl` varchar(11) DEFAULT NULL COMMENT '短链接',
+    `surl` varchar(11) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '短链接',
     PRIMARY KEY (`id`),
     INDEX(`is_del`),
     UNIQUE(`md5`),
     UNIQUE(`surl`)
 )ENGINE=INNODB DEFAULT CHARSET=utf8mb4 COMMENT = '长短链映射表';
+```
+
+Base62 短码区分大小写。已有库可执行以下语句更新短码列的排序规则。
+
+```sql
+ALTER TABLE `shorturl`.`short_url_map`
+  MODIFY COLUMN `surl` VARCHAR(11) CHARACTER SET ascii COLLATE ascii_bin
+  DEFAULT NULL COMMENT '短链接';
 ```
 
 ## 2. 编写 api 文件

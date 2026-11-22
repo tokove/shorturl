@@ -6,7 +6,7 @@ CREATE TABLE `short_url_map` (
     
     `lurl` varchar(2048) DEFAULT NULL COMMENT '长链接',
     `md5` char(32) DEFAULT NULL COMMENT '长链接MD5', 
-    `surl` varchar(11) DEFAULT NULL COMMENT '短链接',
+    `surl` varchar(11) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '短链接',
     PRIMARY KEY (`id`),
     INDEX(`is_del`),
     UNIQUE(`md5`),
