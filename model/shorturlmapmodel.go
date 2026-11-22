@@ -59,7 +59,6 @@ const (
 func (m *customShortUrlMapModel) FindLurlBySurl(ctx context.Context, surl string) (string, error) {
 	// 0. 先从本地缓存中查询
 	if v, found := m.lc.Get(cacheKeyPrefix + surl); found {
-		logx.Infof("Found long URL in local cache for short URL: %s", v.(string))
 		return v.(string), nil
 	}
 
@@ -76,7 +75,6 @@ func (m *customShortUrlMapModel) FindLurlBySurl(ctx context.Context, surl string
 		}
 		// 1.1 查到直接返回
 		if lurl != "" {
-			logx.Infof("Found long URL in cache for short URL: %s", lurl)
 			m.lc.SetWithTTL(cacheKeyPrefix+surl, lurl, 1, localCacheTTL+rand.N(localCacheJitter))
 			return lurl, nil
 		}
