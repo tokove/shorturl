@@ -54,6 +54,7 @@ const (
 	redisCacheJitter = 60 * 60 * 2  // 2 hours
 	localCacheTTL    = 5 * time.Minute
 	localCacheJitter = time.Minute
+	lookupTimeout    = 3 * time.Second
 )
 
 func (m *customShortUrlMapModel) FindLurlBySurl(ctx context.Context, surl string) (string, error) {
@@ -66,7 +67,8 @@ func (m *customShortUrlMapModel) FindLurlBySurl(ctx context.Context, surl string
 	defer cancel()
 
 	res := m.sf.DoChan(surl, func() (any, error) {
-		detachedCtx := context.WithoutCancel(ctx)
+		detachedCtx, cancelLookup := context.WithTimeout(context.WithoutCancel(ctx), lookupTimeout)
+		defer cancelLookup()
 		// 1. 从缓存中查询长链
 		lurl, err := m.rdb.GetCtx(detachedCtx, cacheKeyPrefix+surl)
 		// 1.0 出错
